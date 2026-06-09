@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
     return new Response(csv, {
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Type": "application/octet-stream",
         "Content-Disposition": 'attachment; filename="qianji_import.csv"',
         "Cache-Control": "no-store"
       }

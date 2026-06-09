@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/button";
@@ -12,6 +11,7 @@ export default function ExportPage() {
   const transactions = useImportStore((state) => state.transactions);
   const account2 = useImportStore((state) => state.account2);
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
   const selectedTransactions = useMemo(
     () => transactions.filter((transaction) => transaction.selected),
     [transactions]
@@ -21,14 +21,70 @@ export default function ExportPage() {
     () => generateQianjiCsv(transactions, { account2 }).replace(/^\uFEFF/, ""),
     [account2, transactions]
   );
-  const exportPayload = useMemo(() => JSON.stringify(selectedTransactions), [selectedTransactions]);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    setError("");
-    if (!rows.length) {
-      event.preventDefault();
-      setError("没有可导出的记录");
+  async function handleDownload() {
+    try {
+      setError("");
+      setDownloading(true);
+
+      if (!rows.length) {
+        throw new Error("没有可导出的记录");
+      }
+
+      const response = await fetch("/api/export-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account2,
+          transactions: selectedTransactions
+        })
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
+        throw new Error(payload?.error || "CSV 下载失败");
+      }
+
+      const blob = await response.blob();
+      const file = new File([blob], "qianji_import.csv", { type: "text/csv;charset=utf-8" });
+      const shareData = {
+        files: [file],
+        title: "qianji_import.csv"
+      };
+
+      if (navigator.canShare?.(shareData)) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      const url = URL.createObjectURL(file);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "qianji_import.csv";
+      link.rel = "noopener";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setError("如果没有看到下载文件，请长按保存，或使用 Safari 下载 CSV。");
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error && nextError.name === "AbortError"
+          ? "下载已取消"
+          : "下载失败。请长按保存，或使用 Safari 下载 CSV。"
+      );
+    } finally {
+      setDownloading(false);
     }
+  }
+
+  function validateDownload() {
+    if (!rows.length) {
+      setError("没有可导出的记录");
+      return false;
+    }
+
+    return true;
   }
 
   return (
@@ -38,18 +94,16 @@ export default function ExportPage() {
           <p className="text-sm text-muted-foreground">已选记录</p>
           <p className="mt-2 text-3xl font-semibold">{rows.length}</p>
           <p className="mt-2 text-sm text-muted-foreground">账户2：{account2 || "未选择"}</p>
-          <form action="/api/export-csv" className="mt-4 flex flex-wrap gap-2" method="post" onSubmit={handleSubmit}>
-            <input name="account2" type="hidden" value={account2} />
-            <input name="transactions" type="hidden" value={exportPayload} />
-            <Button disabled={!rows.length} type="submit">
-              下载 CSV
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button disabled={!rows.length || downloading} onClick={() => validateDownload() && void handleDownload()}>
+              {downloading ? "下载中" : "下载 CSV"}
             </Button>
             <Link className="inline-flex" href="/review">
               <Button type="button" variant="secondary">
                 返回审核
               </Button>
             </Link>
-          </form>
+          </div>
           {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
         </div>
         <div className="overflow-hidden rounded-md border bg-card">

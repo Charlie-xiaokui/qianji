@@ -1,13 +1,28 @@
 "use client";
 
 import { Trash2 } from "lucide-react";
+import { useEffect } from "react";
 import { Button } from "@/components/button";
-import { categories } from "@/lib/types";
+import { getDefaultSubcategory, normalizeCategoryResult } from "@/lib/category-rules";
+import { CATEGORY_OPTIONS } from "@/lib/types";
 import { formatAmount, platformLabel } from "@/lib/utils";
 import { useImportStore } from "@/store/import-store";
 
 export function TransactionTable() {
   const { transactions, updateTransaction, removeTransaction, selectAll } = useImportStore();
+
+  useEffect(() => {
+    transactions.forEach((transaction) => {
+      const normalized = normalizeCategoryResult(
+        { category: transaction.category, subcategory: transaction.subcategory },
+        transaction.merchant
+      );
+
+      if (normalized.category !== transaction.category || normalized.subcategory !== transaction.subcategory) {
+        updateTransaction(transaction.id, normalized);
+      }
+    });
+  }, [transactions, updateTransaction]);
 
   if (!transactions.length) {
     return (
@@ -38,11 +53,18 @@ export function TransactionTable() {
           <span>来源</span>
           <span />
         </div>
-        {transactions.map((transaction) => (
-          <div
-            className="grid gap-3 border-b px-3 py-3 last:border-b-0 md:grid-cols-[44px_160px_1fr_110px_120px_120px_90px_48px] md:items-center"
-            key={transaction.id}
-          >
+        {transactions.map((transaction) => {
+          const normalized = normalizeCategoryResult(
+            { category: transaction.category, subcategory: transaction.subcategory },
+            transaction.merchant
+          );
+          const subcategories = CATEGORY_OPTIONS[normalized.category] ?? ["其它"];
+
+          return (
+            <div
+              className="grid gap-3 border-b px-3 py-3 last:border-b-0 md:grid-cols-[44px_160px_1fr_110px_120px_120px_90px_48px] md:items-center"
+              key={transaction.id}
+            >
             <input
               checked={transaction.selected}
               className="size-5"
@@ -74,24 +96,25 @@ export function TransactionTable() {
             />
             <select
               className="rounded border bg-background px-2 py-2 text-sm"
-              onChange={(event) =>
+              onChange={(event) => {
+                const category = event.target.value;
                 updateTransaction(transaction.id, {
-                  category: event.target.value,
-                  subcategory: categories[event.target.value]?.[0] ?? "其它"
-                })
-              }
-              value={transaction.category}
+                  category,
+                  subcategory: getDefaultSubcategory(category)
+                });
+              }}
+              value={normalized.category}
             >
-              {Object.keys(categories).map((category) => (
+              {Object.keys(CATEGORY_OPTIONS).map((category) => (
                 <option key={category}>{category}</option>
               ))}
             </select>
             <select
               className="rounded border bg-background px-2 py-2 text-sm"
               onChange={(event) => updateTransaction(transaction.id, { subcategory: event.target.value })}
-              value={transaction.subcategory}
+              value={normalized.subcategory}
             >
-              {(categories[transaction.category] ?? ["其它"]).map((subcategory) => (
+              {subcategories.map((subcategory) => (
                 <option key={subcategory}>{subcategory}</option>
               ))}
             </select>
@@ -105,7 +128,8 @@ export function TransactionTable() {
               <Trash2 className="size-4" />
             </Button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

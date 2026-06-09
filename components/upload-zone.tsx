@@ -80,15 +80,17 @@ export function UploadZone() {
       <h2 className="text-lg font-semibold">上传支付宝或微信账单截图</h2>
       <p className="mt-2 max-w-sm text-sm text-muted-foreground">支持 jpg、jpeg、png、webp，多张截图会以 FormData 上传。</p>
       <input
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        className="pointer-events-none absolute size-px opacity-0"
         multiple
         onChange={(event) => acceptFiles(Array.from(event.target.files ?? []))}
         ref={inputRef}
         type="file"
       />
       <div className="mt-5 flex flex-wrap justify-center gap-2">
-        <Button onClick={() => inputRef.current?.click()}>选择截图</Button>
+        <Button onClick={() => inputRef.current?.click()} type="button">
+          选择截图
+        </Button>
         <Button disabled={!files.length || status !== "idle"} onClick={recognizeFiles} variant="secondary">
           {status === "recognizing" ? "识别中" : status === "classifying" ? "分类中" : "开始识别"}
         </Button>
