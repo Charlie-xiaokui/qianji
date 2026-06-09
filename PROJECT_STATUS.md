@@ -50,9 +50,13 @@ QianJi Screenshot Importer 是一个专门为钱迹设计的账单截图导入�
 - OCR type 规则已加入：金额 `+` 为收入，金额 `-` 为支出，`微信红包-来自xxx` 为收入，`转账-转给xxx` 为支出，`余额宝-收益发放` 为收入
 - OCR 单图失败不会阻断整体流程，会返回 `warnings` 并继续处理其它图片
 - Phase 5 端到端验证通过：两张真实截图 OCR 共 13 条，收入 3 条、支出 10 条，CSV 已正确输出收入/支出类型
-- Phase 6 已修分类规则：`转账-转给` -> `转账 / 转出`，`微信红包-来自` -> `收入 / 红包收入`，`余额宝-收益发放` -> `收入 / 理财收益`
+- Phase 6 已修分类规则，当前按钱迹常用分类优化为：`转账-转给` -> `转出 / 其它`，`微信红包-来自` -> `收入 / 红包收入`，`余额宝-收益发放` -> `收入 / 理财收益`
 - Phase 6 已修支付宝相对日期：`今天 / 昨天 / 前天` 根据上传日期转换真实日期
 - Phase 6 端到端验证通过：支付宝截图中的 `今天` 已转换为 `2026-06-09`，转账/红包/余额宝规则均命中
+- 已优化钱迹导入分类准确率：分类 schema 已切换为用户常用钱迹分类，减少 `其它 / 其它`
+- 已新增共享 keyword 分类规则，规则优先级高于 MiniMax 分类结果
+- MiniMax 返回非法分类时，会先按 merchant 执行 keyword fallback，再兜底为 `其它 / 其它`
+- 上传 OCR 后默认的 `其它 / 其它` 不再作为分类缓存 fallback，避免提前写入低质量缓存
 
 ## 已创建文件列表
 
@@ -88,6 +92,7 @@ lib/utils.ts
 lib/dedupe.ts
 lib/csv.ts
 lib/image.ts
+lib/category-rules.ts
 lib/category-cache.ts
 lib/classification.ts
 lib/minimax.ts
@@ -114,8 +119,10 @@ ARCHITECTURE.md
 - IndexedDB 表名为 `merchant_category_cache`。
 - 分类查询顺序为：
   - merchant
+  - 本地 keyword 规则
   - IndexedDB 缓存
   - 未命中调用 MiniMax 分类 API
+  - MiniMax 返回非法分类时先走 keyword fallback
   - 写回 IndexedDB
 - 重复检测不自动取消勾选。
 - 重复记录只设置 `possibleDuplicate = true`。
@@ -246,18 +253,33 @@ type: "income" 或 "expense"
 分类 Prompt：
 
 ```text
-根据中国个人记账习惯判断商户分类。
-只返回严格 JSON，不要 Markdown，不要解释。
+你是钱迹账单导入分类助手。
+根据商户名称判断最适合的钱迹分类。
+只返回严格 JSON，不要 Markdown，不要解释，不要返回其它字段。
 
 可选分类：
-餐饮: 早餐, 午餐, 晚餐, 饮品, 外卖
-交通: 打车, 公交, 地铁
-购物: 日用品, 电商
-娱乐: 游戏, 电影
-医疗: 药品, 医院
-住房: 房租, 水电
-教育: 课程, 书籍
-收入: 工资, 奖金, 转账收入
+餐饮: 三餐, 零食, 烟酒
+日用百货: 其它
+营养保健: 其它
+育儿服务: 其它
+婴儿用品: 其它
+婴儿食品: 其它
+厨房电器: 其它
+服饰装扮: 其它
+母婴用品: 其它
+转出: 其它
+交通: 停车费, 充电, 配件
+学习: 其它
+运动: 其它
+旅行: 其它
+娱乐: 其它
+医疗: 产检, 药品, 就诊, 疫苗, 住院
+电器数码: 其它
+请客送礼: 其它
+爱车养车: 其它
+文化休闲: 其它
+住房: 日用品, 水电煤, 房贷, 房租, 家具, 家电, 厨房
+收入: 红包收入, 理财收益, 收红包, 结婚收礼, 寿辰收礼, 乔迁收礼, 其它
 其它: 其它
 
 未知商户返回：
@@ -334,9 +356,11 @@ Phase 3 已实现基础能力：
 
 ```text
 merchant
+-> 本地 keyword 规则
 -> IndexedDB merchant_category_cache
 -> 命中直接返回
 -> 未命中 POST /api/classify
+-> MiniMax 返回非法分类时先执行 keyword fallback
 -> 写回 IndexedDB
 -> 返回分类结果
 ```

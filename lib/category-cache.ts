@@ -1,5 +1,6 @@
 "use client";
 
+import { classifyByKeywordRule, isFallbackCategory, normalizeCategoryResult } from "@/lib/category-rules";
 import type { CategoryResult, MerchantCategoryCache } from "@/lib/types";
 
 const databaseName = "qianji_screenshot_importer";
@@ -8,19 +9,6 @@ const databaseVersion = 1;
 
 function normalizeMerchant(merchant: string) {
   return merchant.trim();
-}
-
-function classifyByMerchantRule(merchant: string): CategoryResult | undefined {
-  if (merchant.startsWith("转账-转给")) {
-    return { category: "转账", subcategory: "转出" };
-  }
-  if (merchant.startsWith("微信红包-来自")) {
-    return { category: "收入", subcategory: "红包收入" };
-  }
-  if (merchant.includes("余额宝-收益发放")) {
-    return { category: "收入", subcategory: "理财收益" };
-  }
-  return undefined;
 }
 
 function openDatabase() {
@@ -82,20 +70,12 @@ export async function clearMerchantCategoryCache() {
   await withStore<undefined>("readwrite", (store) => store.clear());
 }
 
-function validateCategory(payload: unknown): CategoryResult {
-  if (!payload || typeof payload !== "object") {
-    throw new Error("分类结果格式错误");
-  }
-
-  const record = payload as Record<string, unknown>;
-  return {
-    category: String(record.category || "其它"),
-    subcategory: String(record.subcategory || "其它")
-  };
+function validateCategory(payload: unknown, merchant: string): CategoryResult {
+  return normalizeCategoryResult(payload, merchant);
 }
 
 export async function classifyWithCache(merchant: string, fallback?: CategoryResult) {
-  const ruleCategory = classifyByMerchantRule(merchant);
+  const ruleCategory = classifyByKeywordRule(merchant);
   if (ruleCategory) {
     console.debug(`[classify] rule hit: ${merchant} ${ruleCategory.category}/${ruleCategory.subcategory}`);
     return ruleCategory;
@@ -112,7 +92,7 @@ export async function classifyWithCache(merchant: string, fallback?: CategoryRes
 
   console.debug(`[classify] cache miss: ${merchant}`);
 
-  if (fallback?.category && fallback?.subcategory) {
+  if (fallback?.category && fallback?.subcategory && !isFallbackCategory(fallback)) {
     return setMerchantCategory({
       merchant,
       category: fallback.category,
@@ -132,7 +112,7 @@ export async function classifyWithCache(merchant: string, fallback?: CategoryRes
     throw new Error(payload?.error || "分类失败");
   }
 
-  const category = validateCategory(await response.json());
+  const category = validateCategory(await response.json(), merchant);
   console.debug(`[classify] api success: ${merchant} ${category.category}/${category.subcategory}`);
   return setMerchantCategory({
     merchant,
@@ -142,7 +122,7 @@ export async function classifyWithCache(merchant: string, fallback?: CategoryRes
 }
 
 export async function classifyWithCacheDetails(merchant: string, fallback?: CategoryResult) {
-  const ruleCategory = classifyByMerchantRule(merchant);
+  const ruleCategory = classifyByKeywordRule(merchant);
   if (ruleCategory) {
     console.debug(`[classify] rule hit: ${merchant} ${ruleCategory.category}/${ruleCategory.subcategory}`);
     return {
@@ -163,7 +143,7 @@ export async function classifyWithCacheDetails(merchant: string, fallback?: Cate
 
   console.debug(`[classify] cache miss: ${merchant}`);
 
-  if (fallback?.category && fallback?.subcategory) {
+  if (fallback?.category && fallback?.subcategory && !isFallbackCategory(fallback)) {
     const category = await setMerchantCategory({
       merchant,
       category: fallback.category,
@@ -188,7 +168,7 @@ export async function classifyWithCacheDetails(merchant: string, fallback?: Cate
     throw new Error(payload?.error || "分类失败");
   }
 
-  const category = validateCategory(await response.json());
+  const category = validateCategory(await response.json(), merchant);
   console.debug(`[classify] api success: ${merchant} ${category.category}/${category.subcategory}`);
   const saved = await setMerchantCategory({
     merchant,

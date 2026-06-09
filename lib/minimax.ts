@@ -1,9 +1,5 @@
+import { classifyByKeywordRule, normalizeCategoryResult } from "@/lib/category-rules";
 import { categories, type CategoryResult, type OcrTransaction } from "@/lib/types";
-
-const fallbackCategory: CategoryResult = {
-  category: "其它",
-  subcategory: "其它"
-};
 
 const categorySchema = {
   type: "object",
@@ -17,28 +13,34 @@ const categorySchema = {
       type: "string"
     }
   },
-  additionalProperties: true
+  additionalProperties: false
 } as const;
 
-const categoryPrompt = `根据中国个人记账习惯判断商户分类。
-只返回严格 JSON，不要 Markdown，不要解释。
+const allowedCategoryText = Object.entries(categories)
+  .map(([category, subcategories]) => `${category}: ${subcategories.join(", ")}`)
+  .join("\n");
+
+const categoryPrompt = `你是钱迹账单导入分类助手。
+根据商户名称判断最适合的钱迹分类。
+只返回严格 JSON，不要 Markdown，不要解释，不要返回其它字段。
 
 可选分类：
-餐饮: 早餐, 午餐, 晚餐, 饮品, 外卖
-交通: 打车, 公交, 地铁
-转账: 转出
-购物: 日用品, 电商
-娱乐: 游戏, 电影
-医疗: 药品, 医院
-住房: 房租, 水电
-教育: 课程, 书籍
-收入: 工资, 奖金, 转账收入, 红包收入, 理财收益
-其它: 其它
+${allowedCategoryText}
 
 固定规则：
-merchant 以 "转账-转给" 开头 -> {"category":"转账","subcategory":"转出"}
+merchant 包含 "外卖"、"美团"、"饿了么"、"饭"、"餐"、"面"、"粉"、"粥"、"包子"、"饺子"、"肯德基"、"麦当劳" -> {"category":"餐饮","subcategory":"三餐"}
+merchant 包含 "奶茶"、"咖啡"、"瑞幸"、"星巴克"、"茶"、"甜品"、"零食"、"饮料" -> {"category":"餐饮","subcategory":"零食"}
+merchant 包含 "宝宝"、"儿童"、"婴儿"、"虾皮"、"辅食"、"奶粉"、"调味料"、"宝宝馋了"、"organic"、"大蒜粉"、"香料"、"食品" -> {"category":"婴儿食品","subcategory":"其它"}
+merchant 包含 "衣服"、"服装"、"裙"、"裤"、"鞋"、"帽"、"淘宝服饰"、"鹿向南" -> {"category":"服饰装扮","subcategory":"其它"}
+merchant 包含 "日用"、"纸巾"、"洗衣液"、"清洁"、"收纳"、"百货" -> {"category":"日用百货","subcategory":"其它"}
+merchant 包含 "MiniMax"、"OpenAI"、"Claude"、"API"、"服务器"、"阿里云"、"腾讯云"、"软件"、"会员"、"订阅"、"数码" -> {"category":"电器数码","subcategory":"其它"}
+merchant 包含 "地铁"、"高铁"、"滴滴"、"打车"、"出行"、"停车" -> {"category":"交通","subcategory":"停车费"}
+merchant 包含 "充电" -> {"category":"交通","subcategory":"充电"}
+merchant 包含 "配件" -> {"category":"交通","subcategory":"配件"}
+merchant 包含 "淘宝"、"天猫"、"京东"、"拼多多" 时，先结合商品关键词判断；无法判断时 -> {"category":"日用百货","subcategory":"其它"}
+merchant 以 "转账-转给" 开头或包含 "转给" -> {"category":"转出","subcategory":"其它"}
 merchant 以 "微信红包-来自" 开头 -> {"category":"收入","subcategory":"红包收入"}
-merchant 包含 "余额宝-收益发放" -> {"category":"收入","subcategory":"理财收益"}
+merchant 包含 "余额宝"、"收益发放"、"基金收益"、"利息" -> {"category":"收入","subcategory":"理财收益"}
 
 未知商户返回：
 {"category":"其它","subcategory":"其它"}`;
@@ -110,30 +112,17 @@ function isSchemaValid(payload: unknown): payload is CategoryResult {
   return category in categories && categories[category].includes(subcategory);
 }
 
-function validateCategory(payload: unknown): CategoryResult {
+function validateCategory(payload: unknown, merchant: string): CategoryResult {
   const parsed = parseJsonPayload(payload);
   if (!isSchemaValid(parsed)) {
     console.warn("[classify] api fail: invalid category schema");
-    return fallbackCategory;
+    return normalizeCategoryResult(parsed, merchant);
   }
 
   return {
     category: parsed.category,
     subcategory: parsed.subcategory
   };
-}
-
-function classifyByMerchantRule(merchant: string): CategoryResult | undefined {
-  if (merchant.startsWith("转账-转给")) {
-    return { category: "转账", subcategory: "转出" };
-  }
-  if (merchant.startsWith("微信红包-来自")) {
-    return { category: "收入", subcategory: "红包收入" };
-  }
-  if (merchant.includes("余额宝-收益发放")) {
-    return { category: "收入", subcategory: "理财收益" };
-  }
-  return undefined;
 }
 
 function validateOcrTransactions(payload: unknown): OcrTransaction[] {
@@ -299,7 +288,7 @@ async function withRetry<T>(operation: (signal: AbortSignal) => Promise<T>) {
 }
 
 export async function classifyMerchant(merchant: string): Promise<CategoryResult> {
-  const ruleCategory = classifyByMerchantRule(merchant);
+  const ruleCategory = classifyByKeywordRule(merchant);
   if (ruleCategory) {
     console.info(`[classify] rule hit: ${merchant} ${ruleCategory.category}/${ruleCategory.subcategory}`);
     return ruleCategory;
@@ -307,12 +296,12 @@ export async function classifyMerchant(merchant: string): Promise<CategoryResult
 
   try {
     const content = await withRetry((signal) => requestMiniMaxClassification(merchant, signal));
-    const category = validateCategory(content);
+    const category = validateCategory(content, merchant);
     console.info(`[classify] api success: ${merchant} ${category.category}/${category.subcategory}`);
     return category;
   } catch (error) {
     console.error(`[classify] api fail: ${merchant} ${error instanceof Error ? error.message : "未知错误"}`);
-    return fallbackCategory;
+    return normalizeCategoryResult(undefined, merchant);
   }
 }
 
