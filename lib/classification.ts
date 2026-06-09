@@ -3,8 +3,10 @@
 import { classifyWithCache } from "@/lib/category-cache";
 import type { CategoryResult, ExtractedTransaction, Transaction } from "@/lib/types";
 
+const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 function makeTransactionId(index: number) {
-  return `${Date.now()}-${index}-${crypto.randomUUID()}`;
+  return `${index}-${makeId()}`;
 }
 
 export function transactionFromExtracted(record: ExtractedTransaction, index: number, sourceFile?: string): Transaction {
