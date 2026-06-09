@@ -1,0 +1,17 @@
+{
+  "name": "QianJi Screenshot Importer",
+  "short_name": "QianJi Import",
+  "description": "钱迹账单截图导入工具",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#111827",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
