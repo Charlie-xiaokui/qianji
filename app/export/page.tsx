@@ -1,27 +1,33 @@
 "use client";
 
 import Link from "next/link";
+import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/button";
-import { downloadCsv, generateQianjiCsv, toQianjiRows } from "@/lib/csv";
+import { generateQianjiCsv, toQianjiRows } from "@/lib/csv";
 import { useImportStore } from "@/store/import-store";
 
 export default function ExportPage() {
   const transactions = useImportStore((state) => state.transactions);
+  const account2 = useImportStore((state) => state.account2);
   const [error, setError] = useState("");
-  const rows = toQianjiRows(transactions);
-  const csvPreview = useMemo(() => generateQianjiCsv(transactions).replace(/^\uFEFF/, ""), [transactions]);
+  const selectedTransactions = useMemo(
+    () => transactions.filter((transaction) => transaction.selected),
+    [transactions]
+  );
+  const rows = useMemo(() => toQianjiRows(transactions, { account2 }), [account2, transactions]);
+  const csvPreview = useMemo(
+    () => generateQianjiCsv(transactions, { account2 }).replace(/^\uFEFF/, ""),
+    [account2, transactions]
+  );
+  const exportPayload = useMemo(() => JSON.stringify(selectedTransactions), [selectedTransactions]);
 
-  function handleDownload() {
-    try {
-      setError("");
-      if (!rows.length) {
-        throw new Error("没有可导出的记录");
-      }
-      downloadCsv(transactions);
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "CSV 下载失败");
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    setError("");
+    if (!rows.length) {
+      event.preventDefault();
+      setError("没有可导出的记录");
     }
   }
 
@@ -31,14 +37,19 @@ export default function ExportPage() {
         <div className="rounded-md border bg-card p-4">
           <p className="text-sm text-muted-foreground">已选记录</p>
           <p className="mt-2 text-3xl font-semibold">{rows.length}</p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button disabled={!rows.length} onClick={handleDownload}>
+          <p className="mt-2 text-sm text-muted-foreground">账户2：{account2 || "未选择"}</p>
+          <form action="/api/export-csv" className="mt-4 flex flex-wrap gap-2" method="post" onSubmit={handleSubmit}>
+            <input name="account2" type="hidden" value={account2} />
+            <input name="transactions" type="hidden" value={exportPayload} />
+            <Button disabled={!rows.length} type="submit">
               下载 CSV
             </Button>
             <Link className="inline-flex" href="/review">
-              <Button variant="secondary">返回审核</Button>
+              <Button type="button" variant="secondary">
+                返回审核
+              </Button>
             </Link>
-          </div>
+          </form>
           {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
         </div>
         <div className="overflow-hidden rounded-md border bg-card">

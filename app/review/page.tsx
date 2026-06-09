@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AccountSelector } from "@/components/account-selector";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/button";
 import { TransactionTable } from "@/components/transaction-table";
@@ -11,6 +12,7 @@ export default function ReviewPage() {
           <Button>生成 CSV</Button>
         </Link>
       </div>
+      <AccountSelector />
       <TransactionTable />
     </AppShell>
   );
