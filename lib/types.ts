@@ -23,6 +23,8 @@ export interface ExtractedTransaction {
   amount: number;
   datetime: string;
   type: TransactionType;
+  category?: string;
+  subcategory?: string;
   refundAmount?: number;
   note?: string;
 }
@@ -75,7 +77,7 @@ export const CATEGORY_OPTIONS: Record<string, string[]> = {
   "电器数码": ["其它"],
   "请客送礼": ["其它"],
   "育儿": ["产检", "奶粉", "奶瓶", "辅食", "纸尿裤", "玩具", "衣服", "药品", "早教", "亲子游", "疫苗", "就诊", "月嫂", "住院"],
-  "收入": ["收红包", "结婚收礼", "寿辰收礼", "乔迁收礼", "工资", "生活费", "外快", "股票基金", "理财收益", "其它"],
+  "收入": ["收红包", "结婚收礼", "寿辰收礼", "乔迁收礼", "工资", "生活费", "外快", "股票基金", "理财收益", "退款", "其它"],
   "其它": ["其它"]
 };
 

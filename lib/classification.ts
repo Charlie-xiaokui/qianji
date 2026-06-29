@@ -14,8 +14,8 @@ export function transactionFromExtracted(record: ExtractedTransaction, index: nu
   return {
     id: makeTransactionId(index),
     ...record,
-    category: "其它",
-    subcategory: "其它",
+    category: record.category ?? "其它",
+    subcategory: record.subcategory ?? "其它",
     selected: true,
     sourceFile
   };
