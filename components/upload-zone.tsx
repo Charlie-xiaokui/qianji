@@ -52,7 +52,9 @@ export function UploadZone() {
           merchant: record.merchant,
           amount: record.amount,
           datetime: record.date,
-          type: record.type
+          type: record.type,
+          refundAmount: record.refundAmount,
+          note: record.note
         };
         return transactionFromExtracted(extracted, index);
       });

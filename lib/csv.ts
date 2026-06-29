@@ -27,6 +27,12 @@ function qianjiSubcategory(category: string, subcategory: string) {
   return subcategory;
 }
 
+function qianjiNote(transaction: Transaction) {
+  const note = transaction.note?.trim();
+  const content = note ? `${transaction.merchant}（${note}）` : transaction.merchant;
+  return `${content}（${platformLabel(transaction.platform)}）`;
+}
+
 export function toQianjiRows(transactions: Transaction[], options: CsvOptions = {}) {
   return transactions
     .filter((transaction) => transaction.selected)
@@ -42,9 +48,9 @@ export function toQianjiRows(transactions: Transaction[], options: CsvOptions = 
         "二级分类": qianjiSubcategory(category.category, category.subcategory),
         "类型": qianjiType(transaction.type),
         "金额": formatAmount(transaction.amount),
-        "账户1": "",
-        "账户2": options.account2 ?? "",
-        "备注": transaction.note?.trim() || `${platformLabel(transaction.platform)}-${transaction.merchant}`
+        "账户1": options.account2 ?? "",
+        "账户2": "",
+        "备注": qianjiNote(transaction)
       };
     });
 }

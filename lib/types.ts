@@ -12,6 +12,7 @@ export interface Transaction {
   subcategory: string;
   possibleDuplicate?: boolean;
   selected?: boolean;
+  selectionTouched?: boolean;
   note?: string;
   sourceFile?: string;
 }
@@ -22,6 +23,8 @@ export interface ExtractedTransaction {
   amount: number;
   datetime: string;
   type: TransactionType;
+  refundAmount?: number;
+  note?: string;
 }
 
 export interface OcrTransaction {
@@ -30,6 +33,8 @@ export interface OcrTransaction {
   date: string;
   account: string;
   type: TransactionType;
+  refundAmount?: number;
+  note?: string;
 }
 
 export interface CategoryResult {

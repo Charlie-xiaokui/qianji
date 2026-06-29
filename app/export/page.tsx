@@ -93,7 +93,7 @@ export default function ExportPage() {
         <div className="rounded-md border bg-card p-4">
           <p className="text-sm text-muted-foreground">已选记录</p>
           <p className="mt-2 text-3xl font-semibold">{rows.length}</p>
-          <p className="mt-2 text-sm text-muted-foreground">账户2：{account2 || "未选择"}</p>
+          <p className="mt-2 text-sm text-muted-foreground">账户1：{account2 || "未选择"}</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Button disabled={!rows.length || downloading} onClick={() => validateDownload() && void handleDownload()}>
               {downloading ? "下载中" : "下载 CSV"}
