@@ -130,7 +130,6 @@ export function UploadZone() {
         支持 jpg、jpeg、png、webp 截图，也支持支付宝导出的 CSV 账单。
       </p>
       <input
-        accept="image/jpeg,image/jpg,image/png,image/webp,text/csv,.csv"
         className="pointer-events-none absolute size-px opacity-0"
         multiple
         onChange={(event) => acceptFiles(Array.from(event.target.files ?? []))}

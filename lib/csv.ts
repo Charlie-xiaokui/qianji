@@ -29,7 +29,8 @@ function qianjiSubcategory(category: string, subcategory: string) {
 
 function qianjiNote(transaction: Transaction) {
   const note = transaction.note?.trim();
-  if (note?.startsWith("支付宝-") || note?.startsWith("微信-")) return note;
+  if (note?.startsWith("支付宝-")) return `${note.slice("支付宝-".length)}（支付宝）`;
+  if (note?.startsWith("微信-")) return `${note.slice("微信-".length)}（微信）`;
 
   const content = note ? `${transaction.merchant}（${note}）` : transaction.merchant;
   return `${content}（${platformLabel(transaction.platform)}）`;

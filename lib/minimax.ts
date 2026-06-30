@@ -66,23 +66,22 @@ const ocrPrompt = `你是钱迹账单截图 OCR 助手。
 
 字段：
 merchant: 商户名称
-amount: 数字，支出和收入都返回正数；如果存在部分退款，返回实际支出金额
+amount: 数字，支出和收入都返回正数
 date: 交易日期时间，格式 "YYYY-MM-DD HH:mm:ss"，如果截图只有日期则补 "00:00:00"
 account: 账户或来源，只能返回 "微信账户" 或 "支付宝账户"
 type: "income" 或 "expense"
-refundAmount: 可选数字，只有部分退款时返回退款金额
-note: 可选字符串，部分退款时写 "已退款143.99"
+refundAmount: 可选数字，账单行显示已退款金额时返回退款金额
+note: 可选字符串，账单行显示已退款时写 "已退款143.99"
 
-部分退款识别规则：
-如果账单行显示原消费金额和 "已退款(￥143.99)"、"已退款143.99"、"退款143.99"、"实际支出95.91" 等信息：
-- 不要把退款单独识别成一条收入
-- 只返回原消费对应的一条 expense
-- amount = 原消费金额 - 已退款金额
+退款识别规则：
+如果支出账单行显示 "已退款(￥7.90)"、"已退款7.90" 等信息：
+- 支出记录仍按原始支出金额返回，不要用支出金额减退款金额
 - refundAmount = 已退款金额
 - note = "已退款" + 退款金额
+- 退款如果在账单中单独出现为收入订单，再单独返回一条 income
 
 示例：
-原消费 -239.90，已退款(￥143.99) -> {"amount":95.91,"refundAmount":143.99,"type":"expense","note":"已退款143.99"}
+原消费 -341.20，已退款(￥7.90) -> {"amount":341.20,"refundAmount":7.90,"type":"expense","note":"已退款7.90"}
 
 type 识别规则：
 金额前有 "+" -> income
@@ -164,7 +163,6 @@ function validateOcrTransactions(payload: unknown): OcrTransaction[] {
     const record = item as Record<string, unknown>;
     const merchant = String(record.merchant || "").trim();
     const amount = Number(record.amount);
-    const originalAmount = Number(record.originalAmount ?? record.totalAmount ?? record.orderAmount);
     const refundAmount = Number(record.refundAmount ?? record.refundedAmount ?? record.refund ?? 0);
     const date = String(record.date || record.datetime || "").trim();
     const account = String(record.account || "").trim();
@@ -172,7 +170,7 @@ function validateOcrTransactions(payload: unknown): OcrTransaction[] {
     const note = String(record.note || "").trim();
 
     if (!merchant || !Number.isFinite(amount) || amount <= 0 || !date) return [];
-    const actualAmount = normalizeRefundedAmount(amount, refundAmount, originalAmount);
+    const actualAmount = normalizeRefundedAmount(amount);
     if (!Number.isFinite(actualAmount) || actualAmount <= 0) return [];
 
     return [
@@ -199,14 +197,7 @@ function formatMoney(amount: number) {
   return amount.toFixed(2).replace(/\.?0+$/, "");
 }
 
-function normalizeRefundedAmount(amount: number, refundAmount: number, originalAmount: number) {
-  if (!Number.isFinite(refundAmount) || refundAmount <= 0) return amount;
-  if (Number.isFinite(originalAmount) && originalAmount > refundAmount) {
-    return Number((originalAmount - refundAmount).toFixed(2));
-  }
-  if (amount > refundAmount) {
-    return Number((amount - refundAmount).toFixed(2));
-  }
+function normalizeRefundedAmount(amount: number) {
   return amount;
 }
 
