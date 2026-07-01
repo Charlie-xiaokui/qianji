@@ -11,10 +11,13 @@ import { useImportStore } from "@/store/import-store";
 
 export function UploadZone() {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const setTransactions = useImportStore((state) => state.setTransactions);
   const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState("");
+  const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [status, setStatus] = useState<"idle" | "recognizing" | "classifying" | "parsing">("idle");
 
   function isCsvFile(file: File) {
@@ -26,6 +29,8 @@ export function UploadZone() {
   }
 
   function acceptFiles(nextFiles: File[]) {
+    if (!nextFiles.length) return;
+
     try {
       const csvFiles = nextFiles.filter(isCsvFile);
       if (csvFiles.length) {
@@ -43,6 +48,16 @@ export function UploadZone() {
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : "图片读取失败");
     }
+  }
+
+  function handleFileInput(event: React.ChangeEvent<HTMLInputElement>) {
+    acceptFiles(Array.from(event.target.files ?? []));
+    event.target.value = "";
+    setShowUploadPicker(false);
+  }
+
+  function openInput(input: HTMLInputElement | null) {
+    input?.click();
   }
 
   async function parseAlipayCsvFile(file: File) {
@@ -130,14 +145,31 @@ export function UploadZone() {
         支持 jpg、jpeg、png、webp 截图，也支持支付宝导出的 CSV 账单。
       </p>
       <input
-        className="pointer-events-none absolute size-px opacity-0"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        capture="environment"
+        className="fixed -left-[9999px] top-0 size-px opacity-0"
+        onChange={handleFileInput}
+        ref={cameraInputRef}
+        type="file"
+      />
+      <input
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        className="fixed -left-[9999px] top-0 size-px opacity-0"
         multiple
-        onChange={(event) => acceptFiles(Array.from(event.target.files ?? []))}
-        ref={inputRef}
+        onChange={handleFileInput}
+        ref={galleryInputRef}
+        type="file"
+      />
+      <input
+        accept="image/jpeg,image/jpg,image/png,image/webp,.csv,text/csv,application/vnd.ms-excel"
+        className="fixed -left-[9999px] top-0 size-px opacity-0"
+        multiple
+        onChange={handleFileInput}
+        ref={fileInputRef}
         type="file"
       />
       <div className="mt-5 flex flex-wrap justify-center gap-2">
-        <Button onClick={() => inputRef.current?.click()} type="button">
+        <Button onClick={() => setShowUploadPicker(true)} type="button">
           选择文件或截图
         </Button>
         <Button disabled={!files.length || status !== "idle"} onClick={recognizeFiles} variant="secondary">
@@ -152,6 +184,43 @@ export function UploadZone() {
                   : "开始识别"}
         </Button>
       </div>
+      {showUploadPicker ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-foreground/40 px-4 py-5"
+          onClick={() => setShowUploadPicker(false)}
+        >
+          <div
+            className="w-full rounded-md bg-card p-4 text-left shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold">请选择上传方式</h3>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Button
+                className="h-12"
+                onClick={() => openInput(cameraInputRef.current)}
+                type="button"
+                variant="secondary"
+              >
+                相机拍照
+              </Button>
+              <Button
+                className="h-12"
+                onClick={() => openInput(galleryInputRef.current)}
+                type="button"
+                variant="secondary"
+              >
+                手机相册
+              </Button>
+              <Button className="h-12" onClick={() => openInput(fileInputRef.current)} type="button" variant="secondary">
+                选择文件
+              </Button>
+            </div>
+            <Button className="mt-3 w-full" onClick={() => setShowUploadPicker(false)} type="button" variant="ghost">
+              取消
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {files.length ? (
         <p className="mt-4 text-sm text-muted-foreground">
           {selectedCsvFile() ? `已选择支付宝 CSV：${files[0].name}` : `已选择 ${files.length} 张截图`}

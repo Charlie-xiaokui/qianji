@@ -87,6 +87,31 @@ http://192.168.1.23:3000
 
 每次修改后必须先完成本地验证，再考虑提交和发布。
 
+### UI / CSS 健康检查
+
+每次修改 UI 后必须先运行：
+
+```bash
+rm -rf .next
+npm run check:css
+npm run typecheck
+npm run build
+```
+
+CSS 健康检查会确认：
+
+- `app/layout.tsx` 保留 `import "./globals.css";`
+- `app/globals.css` 包含 `@tailwind base;`、`@tailwind components;`、`@tailwind utilities;`
+- `tailwind.config.ts` 的 `content` 覆盖 `app`、`components`、`lib`、`store`
+
+禁止删除或修改 `app/layout.tsx` 中的：
+
+```ts
+import "./globals.css";
+```
+
+如果页面突然变成原生 HTML 链接和按钮样式，不要继续改 OCR、分类、CSV、支付宝导入等业务逻辑，先按本文档的「CSS 丢失排查流程」处理。
+
 ### OCR
 
 验证：
@@ -356,6 +381,67 @@ pm2 restart qianji
 这样效率太低，也更容易把未验证的问题发布到正式环境。
 
 ## 六、故障排查
+
+### CSS 丢失排查流程
+
+现象：
+
+- 页面变成原生 HTML 样式
+- Tailwind 的按钮、卡片、输入框样式全部丢失
+- 页面功能可能还在，但视觉样式明显不对
+
+优先处理顺序：
+
+1. 停止正在运行的 `next dev`。
+2. 清理 Next.js 缓存：
+
+```bash
+rm -rf .next
+```
+
+3. 运行 CSS 健康检查：
+
+```bash
+npm run check:css
+```
+
+4. 运行构建验证：
+
+```bash
+npm run typecheck
+npm run build
+```
+
+5. 重新启动本地服务：
+
+```bash
+npm run dev -- -H 0.0.0.0 -p 3000
+```
+
+6. 打开并确认以下页面样式恢复：
+
+```text
+http://localhost:3000
+http://localhost:3000/review
+http://localhost:3000/export
+http://localhost:3000/mock
+```
+
+如果仍然异常，继续检查：
+
+- `app/layout.tsx` 是否仍然 import `./globals.css`
+- `app/globals.css` 是否仍然包含 Tailwind 三条指令
+- `tailwind.config.ts` 的 `content` 是否覆盖 `app`、`components`、`lib`、`store`
+- `postcss.config.mjs` 是否仍然启用 `tailwindcss` 和 `autoprefixer`
+- 最近修改是否把组件 `className` 删除，或把页面改成纯 HTML 标签
+- 浏览器是否缓存了旧 chunk 或旧 service worker
+- PWA 缓存是否需要清理站点数据后重试
+
+原则：
+
+- 样式丢失时，优先排查 CSS / Tailwind / PWA 缓存
+- 不要在样式链路未恢复前继续改业务逻辑
+- 不要通过重写业务组件来掩盖全局 CSS 未加载的问题
 
 ### git pull 卡住
 

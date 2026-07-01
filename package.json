@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "check:css": "node scripts/check-css-health.mjs",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
