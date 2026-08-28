@@ -1,6 +1,6 @@
 "use client";
 
-import { classifyByKeywordRule, isFallbackCategory, normalizeCategoryResult } from "@/lib/category-rules";
+import { classifyByKeywordRule, isFallbackCategory, matchCategoryRule, validateCategoryResult } from "@/lib/category-rules";
 import type { CategoryResult, MerchantCategoryCache } from "@/lib/types";
 
 const databaseName = "qianji_screenshot_importer";
@@ -70,15 +70,22 @@ export async function clearMerchantCategoryCache() {
   await withStore<undefined>("readwrite", (store) => store.clear());
 }
 
-function validateCategory(payload: unknown, merchant: string): CategoryResult {
-  return normalizeCategoryResult(payload, merchant);
+function validateCategory(payload: unknown): CategoryResult {
+  if (!payload || typeof payload !== "object") return { category: "其它", subcategory: "其它" };
+  const record = payload as Record<string, unknown>;
+  return validateCategoryResult(String(record.category || ""), String(record.subcategory || "")) ?? {
+    category: "其它",
+    subcategory: "其它"
+  };
 }
 
-export async function classifyWithCache(merchant: string, fallback?: CategoryResult) {
-  const ruleCategory = classifyByKeywordRule(merchant);
-  if (ruleCategory) {
-    console.debug(`[classify] rule hit: ${merchant} ${ruleCategory.category}/${ruleCategory.subcategory}`);
-    return ruleCategory;
+export async function classifyWithCache(merchant: string, fallback?: CategoryResult, searchText?: string) {
+  const businessRule = matchCategoryRule(searchText || merchant);
+  if (businessRule) {
+    return {
+      category: businessRule.category,
+      subcategory: businessRule.subcategory
+    };
   }
 
   const cached = await getMerchantCategory(merchant);
@@ -92,41 +99,52 @@ export async function classifyWithCache(merchant: string, fallback?: CategoryRes
 
   console.debug(`[classify] cache miss: ${merchant}`);
 
-  if (fallback?.category && fallback?.subcategory && !isFallbackCategory(fallback)) {
-    return setMerchantCategory({
-      merchant,
-      category: fallback.category,
-      subcategory: fallback.subcategory
+  try {
+    const response = await fetch("/api/classify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ merchant })
     });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
+      console.error(`[classify] api fail: ${merchant} ${payload?.error || response.statusText}`);
+      throw new Error(payload?.error || "分类失败");
+    }
+
+    const category = validateCategory(await response.json());
+    console.debug(`[classify] api success: ${merchant} ${category.category}/${category.subcategory}`);
+
+    if (!isFallbackCategory(category)) {
+      return setMerchantCategory({
+        merchant,
+        category: category.category,
+        subcategory: category.subcategory
+      });
+    }
+  } catch (error) {
+    console.error(`[classify] api fail: ${merchant} ${error instanceof Error ? error.message : "分类失败"}`);
   }
 
-  const response = await fetch("/api/classify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ merchant })
-  });
+  const keywordCategory = classifyByKeywordRule(searchText || merchant);
+  if (keywordCategory) return keywordCategory;
 
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
-    console.error(`[classify] api fail: ${merchant} ${payload?.error || response.statusText}`);
-    throw new Error(payload?.error || "分类失败");
+  if (fallback?.category && fallback?.subcategory && !isFallbackCategory(fallback)) {
+    return fallback;
   }
 
-  const category = validateCategory(await response.json(), merchant);
-  console.debug(`[classify] api success: ${merchant} ${category.category}/${category.subcategory}`);
-  return setMerchantCategory({
-    merchant,
-    category: category.category,
-    subcategory: category.subcategory
-  });
+  return {
+    category: "其它",
+    subcategory: "其它"
+  };
 }
 
-export async function classifyWithCacheDetails(merchant: string, fallback?: CategoryResult) {
-  const ruleCategory = classifyByKeywordRule(merchant);
-  if (ruleCategory) {
-    console.debug(`[classify] rule hit: ${merchant} ${ruleCategory.category}/${ruleCategory.subcategory}`);
+export async function classifyWithCacheDetails(merchant: string, fallback?: CategoryResult, searchText?: string) {
+  const businessRule = matchCategoryRule(searchText || merchant);
+  if (businessRule) {
     return {
-      ...ruleCategory,
+      category: businessRule.category,
+      subcategory: businessRule.subcategory,
       source: "rule" as const
     };
   }
@@ -143,42 +161,59 @@ export async function classifyWithCacheDetails(merchant: string, fallback?: Cate
 
   console.debug(`[classify] cache miss: ${merchant}`);
 
-  if (fallback?.category && fallback?.subcategory && !isFallbackCategory(fallback)) {
-    const category = await setMerchantCategory({
-      merchant,
-      category: fallback.category,
-      subcategory: fallback.subcategory
+  try {
+    const response = await fetch("/api/classify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ merchant })
     });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
+      console.error(`[classify] api fail: ${merchant} ${payload?.error || response.statusText}`);
+      throw new Error(payload?.error || "分类失败");
+    }
+
+    const category = validateCategory(await response.json());
+    console.debug(`[classify] api success: ${merchant} ${category.category}/${category.subcategory}`);
+
+    if (!isFallbackCategory(category)) {
+      const saved = await setMerchantCategory({
+        merchant,
+        category: category.category,
+        subcategory: category.subcategory
+      });
+
+      return {
+        category: saved.category,
+        subcategory: saved.subcategory,
+        source: "api" as const
+      };
+    }
+  } catch (error) {
+    console.error(`[classify] api fail: ${merchant} ${error instanceof Error ? error.message : "分类失败"}`);
+  }
+
+  const keywordCategory = classifyByKeywordRule(searchText || merchant);
+  if (keywordCategory) {
     return {
-      category: category.category,
-      subcategory: category.subcategory,
+      category: keywordCategory.category,
+      subcategory: keywordCategory.subcategory,
       source: "fallback" as const
     };
   }
 
-  const response = await fetch("/api/classify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ merchant })
-  });
-
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => undefined)) as { error?: string } | undefined;
-    console.error(`[classify] api fail: ${merchant} ${payload?.error || response.statusText}`);
-    throw new Error(payload?.error || "分类失败");
+  if (fallback?.category && fallback?.subcategory && !isFallbackCategory(fallback)) {
+    return {
+      category: fallback.category,
+      subcategory: fallback.subcategory,
+      source: "fallback" as const
+    };
   }
 
-  const category = validateCategory(await response.json(), merchant);
-  console.debug(`[classify] api success: ${merchant} ${category.category}/${category.subcategory}`);
-  const saved = await setMerchantCategory({
-    merchant,
-    category: category.category,
-    subcategory: category.subcategory
-  });
-
   return {
-    category: saved.category,
-    subcategory: saved.subcategory,
-    source: "api" as const
+    category: "其它",
+    subcategory: "其它",
+    source: "fallback" as const
   };
 }

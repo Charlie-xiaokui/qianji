@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { normalizeCategoryResult } from "@/lib/category-rules";
+import { validateCategoryResult } from "@/lib/category-rules";
 import type { Transaction } from "@/lib/types";
 import { formatAmount, platformLabel, toQianjiDate } from "@/lib/utils";
 
@@ -40,10 +40,10 @@ export function toQianjiRows(transactions: Transaction[], options: CsvOptions = 
   return transactions
     .filter((transaction) => transaction.selected)
     .map((transaction) => {
-      const category = normalizeCategoryResult(
-        { category: transaction.category, subcategory: transaction.subcategory },
-        transaction.merchant
-      );
+      const category = validateCategoryResult(transaction.category, transaction.subcategory) ?? {
+        category: "其它",
+        subcategory: "其它"
+      };
 
       return {
         "时间": toQianjiDate(transaction.datetime),

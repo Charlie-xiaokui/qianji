@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "check:css": "node scripts/check-css-health.mjs",
+    "test:business-rules": "node scripts/verify-business-rules.mjs",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
@@ -25,6 +26,7 @@
     "react-dom": "^19.0.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zustand": "^5.0.2"
   },
   "devDependencies": {

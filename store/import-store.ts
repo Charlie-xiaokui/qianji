@@ -13,6 +13,7 @@ type ImportState = {
   updateTransaction: (id: string, patch: Partial<Transaction>) => void;
   removeTransaction: (id: string) => void;
   selectAll: (selected: boolean) => void;
+  invertSelection: () => void;
   clear: () => void;
 };
 
@@ -41,6 +42,14 @@ export const useImportStore = create<ImportState>((set) => ({
   selectAll: (selected) =>
     set((state) => ({
       transactions: state.transactions.map((item) => ({ ...item, selected, selectionTouched: true }))
+    })),
+  invertSelection: () =>
+    set((state) => ({
+      transactions: state.transactions.map((item) => ({
+        ...item,
+        selected: !item.selected,
+        selectionTouched: true
+      }))
     })),
   clear: () => set({ transactions: [], account2: "" })
 }));

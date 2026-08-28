@@ -1,7 +1,16 @@
-import type { Transaction } from "@/lib/types";
+import type { Platform, Transaction } from "@/lib/types";
 import { formatAmount, normalizeDatetime } from "@/lib/utils";
 
-export function transactionKey(transaction: Pick<Transaction, "merchant" | "amount" | "datetime">) {
+export function transactionKey(
+  transaction: Pick<Transaction, "merchant" | "amount" | "datetime"> & {
+    platform?: Platform;
+    sourceId?: string;
+  }
+) {
+  if (transaction.sourceId) {
+    return `${transaction.platform ?? "unknown"}_${transaction.sourceId}`;
+  }
+
   const minute = normalizeDatetime(transaction.datetime).slice(0, 16).replace(" ", "T");
   return `${transaction.merchant.trim()}_${formatAmount(transaction.amount)}_${minute}`;
 }

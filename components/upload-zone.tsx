@@ -7,7 +7,49 @@ import { Button } from "@/components/button";
 import { classifyTransactionsWithCache, transactionFromExtracted } from "@/lib/classification";
 import { filesToOcrFormData } from "@/lib/image";
 import type { ExtractedTransaction, OcrTransaction } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { useImportStore } from "@/store/import-store";
+
+const imageAccept = "image/jpeg,image/jpg,image/png,image/webp";
+const billFileAccept = `${imageAccept},.csv,.xlsx,.xls,text/csv,application/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`;
+const billFileExtensions = [".csv", ".xlsx", ".xls"];
+const unsupportedBillExtensions = new Set([".zip"]);
+
+type UploadInputProps = {
+  accept: string;
+  capture?: "environment";
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  label: string;
+  multiple?: boolean;
+  onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+};
+
+function UploadInputOption({ accept, capture, inputRef, label, multiple, onChange }: UploadInputProps) {
+  return (
+    <div
+      className={cn(
+        "relative inline-flex min-h-12 items-center justify-center overflow-hidden rounded-md border bg-card px-4 text-sm font-medium transition hover:bg-muted"
+      )}
+      onClick={(event) => {
+        if (event.target instanceof HTMLInputElement) return;
+        inputRef.current?.click();
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      {label}
+      <input
+        accept={accept}
+        capture={capture}
+        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        multiple={multiple}
+        onChange={onChange}
+        ref={inputRef}
+        type="file"
+      />
+    </div>
+  );
+}
 
 export function UploadZone() {
   const router = useRouter();
@@ -20,24 +62,35 @@ export function UploadZone() {
   const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [status, setStatus] = useState<"idle" | "recognizing" | "classifying" | "parsing">("idle");
 
-  function isCsvFile(file: File) {
-    return file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv";
+  function isBillFile(file: File) {
+    const lower = file.name.toLowerCase();
+    return billFileExtensions.some((extension) => lower.endsWith(extension));
   }
 
-  function selectedCsvFile() {
-    return files.length === 1 && isCsvFile(files[0]) ? files[0] : undefined;
+  function hasUnsupportedBillExtension(file: File) {
+    const lower = file.name.toLowerCase();
+    return Array.from(unsupportedBillExtensions).some((extension) => lower.endsWith(extension));
+  }
+
+  function selectedBillFile() {
+    return files.length === 1 && isBillFile(files[0]) ? files[0] : undefined;
   }
 
   function acceptFiles(nextFiles: File[]) {
     if (!nextFiles.length) return;
 
     try {
-      const csvFiles = nextFiles.filter(isCsvFile);
-      if (csvFiles.length) {
+      const unsupportedFile = nextFiles.find(hasUnsupportedBillExtension);
+      if (unsupportedFile) {
+        throw new Error("当前支持支付宝或微信导出的 CSV、XLSX、XLS 账单，暂不支持 ZIP");
+      }
+
+      const billFiles = nextFiles.filter(isBillFile);
+      if (billFiles.length) {
         if (nextFiles.length > 1) {
-          throw new Error("支付宝 CSV 请单独上传，不要和截图混选");
+          throw new Error("账单文件请单独上传，不要和截图混选");
         }
-        setFiles(csvFiles);
+        setFiles(billFiles);
         setError("");
         return;
       }
@@ -56,38 +109,37 @@ export function UploadZone() {
     setShowUploadPicker(false);
   }
 
-  function openInput(input: HTMLInputElement | null) {
-    input?.click();
-  }
-
-  async function parseAlipayCsvFile(file: File) {
+  async function parseBillFile(file: File) {
     setStatus("parsing");
     const formData = new FormData();
     formData.append("file", file, file.name);
 
-    const response = await fetch("/api/import-alipay-csv", {
+    const response = await fetch("/api/import-bill-file", {
       method: "POST",
       body: formData
     });
     const payload = (await response.json()) as {
       transactions?: ExtractedTransaction[];
+      source?: "alipay" | "wechat";
       error?: string;
     };
 
     if (!response.ok || !payload.transactions?.length) {
-      throw new Error(payload.error || "支付宝 CSV 解析失败");
+      throw new Error(payload.error || "账单文件解析失败");
     }
 
-    setTransactions(payload.transactions.map((record, index) => transactionFromExtracted(record, index, file.name)));
+    const transactions = payload.transactions.map((record, index) => transactionFromExtracted(record, index, file.name));
+    setStatus("classifying");
+    setTransactions(await classifyTransactionsWithCache(transactions));
     router.push("/review");
   }
 
   async function recognizeFiles() {
     try {
       setError("");
-      const csvFile = selectedCsvFile();
+      const csvFile = selectedBillFile();
       if (csvFile) {
-        await parseAlipayCsvFile(csvFile);
+        await parseBillFile(csvFile);
         return;
       }
 
@@ -115,7 +167,9 @@ export function UploadZone() {
           datetime: record.date,
           type: record.type,
           refundAmount: record.refundAmount,
-          note: record.note
+          note: record.note,
+          source: "ocr",
+          ocrText: `${record.merchant} ${record.note ?? ""} ${record.account}`
         };
         return transactionFromExtracted(extracted, index);
       });
@@ -140,34 +194,10 @@ export function UploadZone() {
       <div className="mb-4 flex size-12 items-center justify-center rounded-md bg-muted">
         <Upload className="size-6" />
       </div>
-      <h2 className="text-lg font-semibold">上传支付宝或微信账单截图</h2>
+      <h2 className="text-lg font-semibold">上传支付宝或微信账单</h2>
       <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-        支持 jpg、jpeg、png、webp 截图，也支持支付宝导出的 CSV 账单。
+        支持 jpg、jpeg、png、webp 截图，也支持支付宝或微信支付导出的 CSV、XLSX、XLS 账单。
       </p>
-      <input
-        accept="image/jpeg,image/jpg,image/png,image/webp"
-        capture="environment"
-        className="fixed -left-[9999px] top-0 size-px opacity-0"
-        onChange={handleFileInput}
-        ref={cameraInputRef}
-        type="file"
-      />
-      <input
-        accept="image/jpeg,image/jpg,image/png,image/webp"
-        className="fixed -left-[9999px] top-0 size-px opacity-0"
-        multiple
-        onChange={handleFileInput}
-        ref={galleryInputRef}
-        type="file"
-      />
-      <input
-        accept="image/jpeg,image/jpg,image/png,image/webp,.csv,text/csv,application/vnd.ms-excel"
-        className="fixed -left-[9999px] top-0 size-px opacity-0"
-        multiple
-        onChange={handleFileInput}
-        ref={fileInputRef}
-        type="file"
-      />
       <div className="mt-5 flex flex-wrap justify-center gap-2">
         <Button onClick={() => setShowUploadPicker(true)} type="button">
           选择文件或截图
@@ -179,7 +209,7 @@ export function UploadZone() {
               ? "分类中"
               : status === "parsing"
                 ? "解析中"
-                : selectedCsvFile()
+                : selectedBillFile()
                   ? "开始导入"
                   : "开始识别"}
         </Button>
@@ -195,25 +225,27 @@ export function UploadZone() {
           >
             <h3 className="text-base font-semibold">请选择上传方式</h3>
             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Button
-                className="h-12"
-                onClick={() => openInput(cameraInputRef.current)}
-                type="button"
-                variant="secondary"
-              >
-                相机拍照
-              </Button>
-              <Button
-                className="h-12"
-                onClick={() => openInput(galleryInputRef.current)}
-                type="button"
-                variant="secondary"
-              >
-                手机相册
-              </Button>
-              <Button className="h-12" onClick={() => openInput(fileInputRef.current)} type="button" variant="secondary">
-                选择文件
-              </Button>
+              <UploadInputOption
+                accept={imageAccept}
+                capture="environment"
+                inputRef={cameraInputRef}
+                label="相机拍照"
+                onChange={handleFileInput}
+              />
+              <UploadInputOption
+                accept={imageAccept}
+                inputRef={galleryInputRef}
+                label="手机相册"
+                multiple
+                onChange={handleFileInput}
+              />
+              <UploadInputOption
+                accept={billFileAccept}
+                inputRef={fileInputRef}
+                label="选择文件"
+                multiple
+                onChange={handleFileInput}
+              />
             </div>
             <Button className="mt-3 w-full" onClick={() => setShowUploadPicker(false)} type="button" variant="ghost">
               取消
@@ -223,7 +255,7 @@ export function UploadZone() {
       ) : null}
       {files.length ? (
         <p className="mt-4 text-sm text-muted-foreground">
-          {selectedCsvFile() ? `已选择支付宝 CSV：${files[0].name}` : `已选择 ${files.length} 张截图`}
+          {selectedBillFile() ? `已选择账单文件：${files[0].name}` : `已选择 ${files.length} 张截图`}
         </p>
       ) : null}
       {error ? <p className="mt-4 text-sm text-destructive">{error}</p> : null}

@@ -1,4 +1,5 @@
 export type Platform = "wechat" | "alipay";
+export type ImportSource = "alipay" | "wechat" | "ocr";
 export type TransactionType = "income" | "expense" | "transfer";
 
 export interface Transaction {
@@ -15,6 +16,24 @@ export interface Transaction {
   selectionTouched?: boolean;
   note?: string;
   sourceFile?: string;
+  sourceId?: string;
+  rawCategory?: string;
+  paymentMethod?: string;
+  status?: string;
+  source?: ImportSource;
+  title?: string;
+  description?: string;
+  remark?: string;
+  counterparty?: string;
+  transactionTarget?: string;
+  originalCategory?: string;
+  rawText?: string;
+  sourceDescription?: string;
+  alipayTitle?: string;
+  alipayCounterparty?: string;
+  wechatProduct?: string;
+  wechatCounterparty?: string;
+  ocrText?: string;
 }
 
 export interface ExtractedTransaction {
@@ -27,6 +46,24 @@ export interface ExtractedTransaction {
   subcategory?: string;
   refundAmount?: number;
   note?: string;
+  sourceId?: string;
+  rawCategory?: string;
+  paymentMethod?: string;
+  status?: string;
+  source?: ImportSource;
+  title?: string;
+  description?: string;
+  remark?: string;
+  counterparty?: string;
+  transactionTarget?: string;
+  originalCategory?: string;
+  rawText?: string;
+  sourceDescription?: string;
+  alipayTitle?: string;
+  alipayCounterparty?: string;
+  wechatProduct?: string;
+  wechatCounterparty?: string;
+  ocrText?: string;
 }
 
 export interface OcrTransaction {
@@ -68,7 +105,7 @@ export const CATEGORY_OPTIONS: Record<string, string[]> = {
   "服饰装扮": ["其它"],
   "母婴用品": ["其它"],
   "转出": ["其它"],
-  "交通": ["停车费", "充电", "配件"],
+  "交通": ["停车费", "充电", "配件", "交通卡充值"],
   "学习": ["其它"],
   "运动": ["其它"],
   "旅行": ["其它"],

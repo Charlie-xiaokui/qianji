@@ -1,7 +1,7 @@
 "use client";
 
 import { classifyWithCache } from "@/lib/category-cache";
-import { isFallbackCategory } from "@/lib/category-rules";
+import { getTransactionSearchText, isFallbackCategory, matchCategoryRule } from "@/lib/category-rules";
 import type { CategoryResult, ExtractedTransaction, Transaction } from "@/lib/types";
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -25,12 +25,22 @@ export async function classifyTransactionsWithCache(transactions: Transaction[])
   const classified: Transaction[] = [];
 
   for (const transaction of transactions) {
+    const ruleCategory = matchCategoryRule(transaction);
+    if (ruleCategory) {
+      classified.push({
+        ...transaction,
+        category: ruleCategory.category,
+        subcategory: ruleCategory.subcategory
+      });
+      continue;
+    }
+
     const candidateFallback: CategoryResult | undefined =
       transaction.category && transaction.subcategory
-        ? { category: transaction.category, subcategory: transaction.subcategory }
-        : undefined;
+      ? { category: transaction.category, subcategory: transaction.subcategory }
+      : undefined;
     const fallback = isFallbackCategory(candidateFallback) ? undefined : candidateFallback;
-    const category = await classifyWithCache(transaction.merchant, fallback);
+    const category = await classifyWithCache(transaction.merchant, fallback, getTransactionSearchText(transaction));
 
     classified.push({
       ...transaction,

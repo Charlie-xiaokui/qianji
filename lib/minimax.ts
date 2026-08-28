@@ -1,4 +1,4 @@
-import { classifyByKeywordRule, normalizeCategoryResult } from "@/lib/category-rules";
+import { validateCategoryResult } from "@/lib/category-rules";
 import { categories, type CategoryResult, type OcrTransaction } from "@/lib/types";
 
 const categorySchema = {
@@ -28,6 +28,7 @@ const categoryPrompt = `你是钱迹账单导入分类助手。
 ${allowedCategoryText}
 
 固定规则：
+merchant 包含 "杭州城市通交通卡有限公司" -> {"category":"交通","subcategory":"交通卡充值"}
 merchant 包含 "外卖"、"美团"、"饿了么"、"饭"、"餐"、"面"、"粉"、"粥"、"包子"、"饺子"、"肯德基"、"麦当劳" -> {"category":"餐饮","subcategory":"三餐"}
 merchant 包含 "奶茶"、"咖啡"、"瑞幸"、"星巴克"、"茶"、"甜品"、"零食"、"饮料" -> {"category":"餐饮","subcategory":"零食"}
 merchant 包含 "宝宝馋了"、"辅食" -> {"category":"育儿","subcategory":"辅食"}
@@ -139,17 +140,14 @@ function isSchemaValid(payload: unknown): payload is CategoryResult {
   return category in categories && categories[category].includes(subcategory);
 }
 
-function validateCategory(payload: unknown, merchant: string): CategoryResult {
+function validateCategory(payload: unknown): CategoryResult {
   const parsed = parseJsonPayload(payload);
   if (!isSchemaValid(parsed)) {
     console.warn("[classify] api fail: invalid category schema");
-    return normalizeCategoryResult(parsed, merchant);
+    return { category: "其它", subcategory: "其它" };
   }
 
-  return {
-    category: parsed.category,
-    subcategory: parsed.subcategory
-  };
+  return validateCategoryResult(parsed.category, parsed.subcategory) ?? { category: "其它", subcategory: "其它" };
 }
 
 function validateOcrTransactions(payload: unknown): OcrTransaction[] {
@@ -335,20 +333,14 @@ async function withRetry<T>(operation: (signal: AbortSignal) => Promise<T>) {
 }
 
 export async function classifyMerchant(merchant: string): Promise<CategoryResult> {
-  const ruleCategory = classifyByKeywordRule(merchant);
-  if (ruleCategory) {
-    console.info(`[classify] rule hit: ${merchant} ${ruleCategory.category}/${ruleCategory.subcategory}`);
-    return ruleCategory;
-  }
-
   try {
     const content = await withRetry((signal) => requestMiniMaxClassification(merchant, signal));
-    const category = validateCategory(content, merchant);
+    const category = validateCategory(content);
     console.info(`[classify] api success: ${merchant} ${category.category}/${category.subcategory}`);
     return category;
   } catch (error) {
     console.error(`[classify] api fail: ${merchant} ${error instanceof Error ? error.message : "未知错误"}`);
-    return normalizeCategoryResult(undefined, merchant);
+    return { category: "其它", subcategory: "其它" };
   }
 }
 

@@ -29,7 +29,7 @@ function sourceText(transaction: Transaction) {
 }
 
 export function TransactionTable() {
-  const { transactions, updateTransaction, selectAll } = useImportStore();
+  const { transactions, updateTransaction, selectAll, invertSelection } = useImportStore();
   const [editingMerchantId, setEditingMerchantId] = useState<string>();
   const [editingAmountId, setEditingAmountId] = useState<string>();
   const [amountDrafts, setAmountDrafts] = useState<Record<string, string>>({});
@@ -59,6 +59,7 @@ export function TransactionTable() {
     : undefined;
   const activePickerCategory = pickerCategory ?? pickerNormalized?.category ?? "其它";
   const activeSubcategories = CATEGORY_OPTIONS[activePickerCategory] ?? ["其它"];
+  const selectedCount = transactions.filter((transaction) => transaction.selected).length;
 
   function startAmountEdit(transaction: Transaction) {
     setEditingAmountId(transaction.id);
@@ -120,13 +121,19 @@ export function TransactionTable() {
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button onClick={() => selectAll(true)} variant="secondary">
           全选
         </Button>
         <Button onClick={() => selectAll(false)} variant="secondary">
           取消全选
         </Button>
+        <Button onClick={invertSelection} variant="secondary">
+          反选
+        </Button>
+        <span className="text-sm text-muted-foreground">
+          已选 {selectedCount} / {transactions.length}
+        </span>
       </div>
 
       <div className="-mx-4 overflow-hidden border-y bg-card sm:mx-0 sm:rounded-md sm:border">
